@@ -88,11 +88,8 @@ async def create_payment(
         if body.method not in ["installment", "card", "sbp"]:
             raise HTTPException(status_code=409, detail="Method not supported")
 
-        if body.method == "installment" and body.installment_months is None:
+        if body.method == "installment" and body.installment_months not in [3, 6, 12]:
             raise HTTPException(status_code=412, detail="Installment months required")
-
-        if body.installment_months not in [3, 6, 12]:
-            raise HTTPException(status_code=409, detail="Installment range not supported")
 
         #Проверка промокода, расчёт discount и amount (При условии что amount - стоимость)
         if body.promo_code:
