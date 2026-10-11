@@ -1,9 +1,9 @@
 import secrets
-from fastapi import FastAPI, status, HTTPException, Header, Security, Depends, Request
+from fastapi import FastAPI, status, HTTPException, Header, Security, Depends
 from pydantic import BaseModel, EmailStr
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse
 from fastapi.security import APIKeyHeader
-from database.DBCommand import Payment, Tariff, get_tariffs, get_payment, create_payment, update_payment_status, get_payment_by_key, payment_to_dict, tariffs_to_list, SessionLocal, get_payment_by_id
+from database.DBCommand import Payment, Tariff, get_tariffs, get_payment, get_payment_by_key, payment_to_dict, tariffs_to_list, SessionLocal, get_payment_by_id
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 import os
 from dotenv import load_dotenv
@@ -87,13 +87,16 @@ async def create_payment(
             raise HTTPException(status_code=412, detail="Installment months required")
 
         #Проверка промокода, расчёт discount и amount (При условии что amount - стоимость)
-        if body.promo_code.upper() in ["KVITTO10"]:
-            if body.promo_code.upper() == "KVITTO10":
-                discount = round(tariff.price * 10 / 100)
+        if body.promo_code:
+            if body.promo_code.upper() in ["KVITTO10"]:
+                if body.promo_code.upper() == "KVITTO10":
+                    discount = round(tariff.price * 10 / 100)
+            else:
+                raise HTTPException(status_code=422, detail="Promo Code not found")
+            amount = tariff.price - discount
         else:
-            raise HTTPException(status_code=422, detail="Promo Code not found")
-        amount = tariff.price - discount
-
+            amount = tariff.price
+        
         #Расчёт рассрочки
         if body.installment_months and body.method == "installment":
             schedule = []
