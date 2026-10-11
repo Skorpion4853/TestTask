@@ -93,10 +93,11 @@ async def create_payment(
                     discount = round(tariff.price * 10 / 100)
             else:
                 raise HTTPException(status_code=422, detail="Promo Code not found")
-            amount = tariff.price - discount
         else:
-            amount = tariff.price
-        
+            discount = 0
+        amount = tariff.price - discount
+
+
         #Расчёт рассрочки
         if body.installment_months and body.method == "installment":
             schedule = []

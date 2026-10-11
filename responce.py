@@ -24,7 +24,7 @@ async def main():
                   "method": "installment",
                   "installment_months": 3,
                   "promo_code": "KvIttO10"},
-            headers={"idempotency_key": "abc222", "X-API-Key": API_KEY}
+            headers={"Idempotency-Key": "abc222", "X-API-Key": API_KEY}
         )
         print(response2.status_code, response2.json())
 
