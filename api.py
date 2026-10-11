@@ -48,6 +48,11 @@ class WebhookRequest(BaseModel):
     payment_id: int
     status: str
 
+def build_schedule(amount: int, months: int) -> list[int]:
+    """Делит сумму на months платежей в копейках, лишние копейки по одной в первые платежи."""
+    base, extra = divmod(amount, months)
+    return [base + 1 if i < extra else base for i in range(months)]
+
 
 @app.get("/tariffs") #Запрос для возврата всех возможных тарифов
 async def tariffs():
@@ -86,6 +91,9 @@ async def create_payment(
         if body.method == "installment" and body.installment_months is None:
             raise HTTPException(status_code=412, detail="Installment months required")
 
+        if body.installment_months not in [3, 6, 12]:
+            raise HTTPException(status_code=409, detail="Installment range not supported")
+
         #Проверка промокода, расчёт discount и amount (При условии что amount - стоимость)
         if body.promo_code:
             if body.promo_code.upper() in ["KVITTO10"]:
@@ -100,11 +108,7 @@ async def create_payment(
 
         #Расчёт рассрочки
         if body.installment_months and body.method == "installment":
-            schedule = []
-            first_month = amount - amount // body.installment_months * (body.installment_months - 1)
-            schedule.append(first_month)
-            for _ in range(body.installment_months-1):
-                schedule.append(amount // body.installment_months)
+            schedule = build_schedule(amount, body.installment_months)
         else:
             schedule = None
 
@@ -153,11 +157,16 @@ async def webhook(body: WebhookRequest):
             raise HTTPException(status_code=404, detail="Payment not found")
         if body.status not in ["succeeded", "failed", "refunded"]:
             raise HTTPException(status_code=409, detail="Status not supported")
-        if payment.status == "pending" and body.status == "refunded":
-            raise HTTPException(status_code=409, detail="invalid_transition")
-        elif payment.status == "succeeded" and body.status != "refunded":
-            raise HTTPException(status_code=409, detail="invalid_transition")
 
-        payment.status = body.status
-        await session.commit()
-        raise HTTPException(status_code=200, detail="The status was successfully changed.")
+        if payment.status == "pending" and body.status in ["succeeded", "failed"]:
+            payment.status = body.status
+            await session.commit()
+            return JSONResponse({"result": "ok"}, status_code=status.HTTP_200_OK)
+
+        elif payment.status == "succeeded" and body.status == "refunded":
+            payment.status = body.status
+            await session.commit()
+            return JSONResponse({"result": "ok"}, status_code=status.HTTP_200_OK)
+
+        else:
+            return JSONResponse({"error": "invalid_transition"}, status_code=status.HTTP_409_CONFLICT)

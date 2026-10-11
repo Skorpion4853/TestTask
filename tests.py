@@ -28,9 +28,7 @@ async def client():
 
 @pytest.fixture
 async def tariff(client):
-    tariffs = [["basic", 990000], ["standart", 1990000], ["premium", 2990000]]
-    for tariff in tariffs:
-        return await create_tariff(tariff[0], tariff[1])
+    return await create_tariff("basic", 990000)
 
 
 
@@ -72,13 +70,13 @@ async def test1(client, tariff, promo_code, expected_discount, expected_amount):
 @pytest.mark.parametrize(
     "installment_months, expected_total_price, expected_schedule",
     [
-        (3, 990000, [330000, 330000, 330000]),  # без промокода
-        (6, 990000, [165000, 165000, 165000, 165000, 165000, 165000]),  # скидка 10%
-        (12, 990000, [82500, 82500, 82500, 82500, 82500, 82500, 82500, 82500, 82500, 82500, 82500, 82500]),  # регистр не важен
+        (3, 990000, [330000, 330000, 330000]),  # 3 месяца
+        (6, 990000, [165000, 165000, 165000, 165000, 165000, 165000]),  # 6 месяцев
+        (12, 990000, [82500, 82500, 82500, 82500, 82500, 82500, 82500, 82500, 82500, 82500, 82500, 82500]),  # 12 месяцев
     ],
 )
-async def test2(client, installment_months, expected_total_price, expected_schedule):
-    body = {"tariff_id": 1, "email": "user@example.com", "method": "installment"}
+async def test2(client, tariff, installment_months, expected_total_price, expected_schedule):
+    body = {"tariff_id": tariff.id, "email": "user@example.com", "method": "installment"}
     if installment_months:
         body["installment_months"] = installment_months
 
@@ -97,10 +95,10 @@ async def count_payments() -> int:
         return await session.scalar(select(func.count()).select_from(Payment))
 
 
-async def test3(client):
+async def test3(client, tariff):
     # Уникальный ключ, чтобы тест не зависел от прошлых запусков (база общая)
     headers = {"Idempotency-Key": f"test-{uuid.uuid4()}"}
-    body = {"tariff_id": 1, "email": "user@example.com", "method": "card"}
+    body = {"tariff_id": tariff.id, "email": "user@example.com", "method": "card"}
     before = await count_payments()
 
     first = await client.post("/payments", json=body, headers=headers)
@@ -130,8 +128,8 @@ async def send_webhook(client, payment_id: int, status: str):
         ("succeeded", "failed"),   # оплаченный платёж нельзя «провалить»
     ],
 )
-async def test4(client, start_status, forbidden_status):
-    body = {"tariff_id": 1, "email": "user@example.com", "method": "card"}
+async def test4(client, tariff, start_status, forbidden_status):
+    body = {"tariff_id": tariff.id, "email": "user@example.com", "method": "card"}
     payment_id = (await client.post("/payments", json=body)).json()["id"]
     if start_status != "pending":
         assert (await send_webhook(client, payment_id, start_status)).status_code == 200
